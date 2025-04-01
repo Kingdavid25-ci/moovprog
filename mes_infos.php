@@ -1,4 +1,3 @@
-
 <?php
 // Démarrer une session pour stocker les informations de l'utilisateur connecté
 session_start();
@@ -7,7 +6,6 @@ session_start();
 $servername = "localhost";
 $username = "root";
 $password = "";
-//$dbname = "moov_africa_test";
 $dbname = "moovprog";
 
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -31,10 +29,13 @@ $result = $conn->query($sql);
 if ($result->num_rows > 0) {
     // Récupérer les données de l'utilisateur
     $row = $result->fetch_assoc();
-    $superieur_matricule = $row['superieur_hierarchique'];
+    $superieur_id_poste = $row['superieur_hierarchique'];
 
     // Requête pour récupérer le nom et prénom du supérieur hiérarchique
-    $sql_superieur = "SELECT nom, prenom FROM salarie WHERE matricule = '$superieur_matricule'";
+    $sql_superieur = "SELECT s.nom, s.prenom 
+                      FROM salarie s 
+                      JOIN poste p ON s.fonction_actuelle = p.nom_poste 
+                      WHERE p.id_poste = '$superieur_id_poste'";
     $result_superieur = $conn->query($sql_superieur);
 
     if ($result_superieur->num_rows > 0) {
@@ -185,7 +186,7 @@ $(function() {
         <h1 class="page-header">Profil personnel</h1>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="main-menu.html">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="main.php">Accueil</a></li>
                 <li class="breadcrumb-item active" aria-current="page">Mes infos</li>
             </ol>
         </nav>

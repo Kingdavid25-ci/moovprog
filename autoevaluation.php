@@ -192,7 +192,7 @@ button:hover {
             <li class="menu-admin"><a href="autoevaluation.php">Autoevaluation</a></li>
             <li><a href="evaluation31.php">Evaluer un collaborateur</a></li>
             <li><a href="modifier31.php">Modifier une evaluation</a></li>
-            <li><a href="">Valider une evaluation</a></li>
+            <li><a href="valider_evaluation.php">Valider une evaluation</a></li>
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Rapport</li>
             <li><a href="">Rapport individuel</a></li>
@@ -206,7 +206,7 @@ button:hover {
       </ul>
       <ul class="nav navbar-nav navbar-right">
     <li><a href="mes_infos.php">Mes infos <span class="fa fa-user fa-lg me-2"></span></a></li>
-    <li><a href="">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
+    <li><a href="index.php">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
 </ul>
 
     </div>
@@ -223,7 +223,7 @@ button:hover {
       
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="main-menu.html">Acceuil</a></li>
+                <li class="breadcrumb-item"><a href="main.php">Acceuil</a></li>
                 <li class="breadcrumb-item active" aria-current="page">Gestion des evaluation</li>
                 <li class="breadcrumb-item active" aria-current="page">Creation  des objectifs</li>
             </ol>
@@ -310,13 +310,27 @@ button:hover {
 
     <script>
         function nextSection(section) {
-            document.querySelector('.section.active').classList.remove('active');
-            document.getElementById(`section${section}`).classList.add('active');
+            if (validateSection(section - 1)) {
+                document.querySelector('.section.active').classList.remove('active');
+                document.getElementById(`section${section}`).classList.add('active');
+            }
         }
 
         function previousSection(section) {
             document.querySelector('.section.active').classList.remove('active');
             document.getElementById(`section${section}`).classList.add('active');
+        }
+
+        function validateSection(section) {
+            const currentSection = document.getElementById(`section${section}`);
+            const textareas = currentSection.querySelectorAll('textarea');
+            for (let textarea of textareas) {
+                if (!/^[a-zA-Z\s]*$/.test(textarea.value)) {
+                    alert('Veuillez entrer uniquement des caractères de type texte dans les commentaires sur la réalisation.');
+                    return false;
+                }
+            }
+            return true;
         }
     </script>
 </body>

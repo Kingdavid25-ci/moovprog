@@ -19,6 +19,55 @@ if ($conn->connect_error) {
 // MATRICULE de l'utilisateur connecté
 $MATRICULE = isset($_SESSION['user_name']) ? $_SESSION['user_name'] : '';
 
+// Vérifier la fonction de l'utilisateur
+$sql = "SELECT fonction_actuelle FROM salarie WHERE matricule = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $MATRICULE);
+$stmt->execute();
+$result = $stmt->get_result();
+$user_data = $result->fetch_assoc();
+$is_dsi = false;
+
+if ($user_data && $user_data['fonction_actuelle'] === 'Directeur Général de Moov Côte d’Ivoire') {
+    $is_dsi = true;
+}
+
+// Afficher le matricule du salarié connecté
+// echo "<p>Matricule du salarié connecté : " . htmlspecialchars($MATRICULE) . "</p>";
+
+// Vérifier si le matricule du salarié connecté est correct
+$sql = "SELECT COUNT(*) as total FROM salarie WHERE matricule = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $MATRICULE);
+$stmt->execute();
+$stmt->bind_result($total);
+$stmt->fetch();
+$stmt->close();
+
+if ($total == 0) {
+    // Si le matricule n'existe pas, afficher un message d'erreur et arrêter l'exécution
+    echo "<script>alert('Matricule incorrect. Veuillez vérifier vos informations de connexion.'); window.location.href = 'login.php';</script>";
+    $conn->close();
+    exit();
+}
+
+// Vérifier si le matricule est un supérieur hiérarchique
+$sql = "SELECT COUNT(*) as total FROM salarie WHERE superieur_hierarchique = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $MATRICULE);
+$stmt->execute();
+$stmt->bind_result($total);
+$stmt->fetch();
+$stmt->close();
+
+if ($total > 0) {
+    // Si le matricule est trouvé comme supérieur hiérarchique
+    //echo "<p>Trouvé : Le matricule est un supérieur hiérarchique.</p>";
+} else {
+    // Si le matricule n'est pas trouvé comme supérieur hiérarchique
+    // echo "<p>Non trouvé : Le matricule n'est pas un supérieur hiérarchique.</p>";
+}
+
 // Récupérer toutes les unités organisationnelles
 $units = [];
 $sql = "SELECT id, nom FROM sructure_entreprise";
@@ -55,7 +104,6 @@ if ($MATRICULE) {
         while ($row = $result->fetch_assoc()) {
             $dailyPerformanceObjectives[] = $row;
         }
-        $stmt->close();
 
         // Récupérer les compétences
         $sql = "SELECT id, description, niveau_requis, statut FROM objectif WHERE categorie = 'competence ' AND sructure_entreprise_id = ?";
@@ -68,7 +116,6 @@ if ($MATRICULE) {
         while ($row = $result->fetch_assoc()) {
             $competenceObjectives[] = $row;
         }
-        $stmt->close();
     } else {
         // Gérer le cas où l'unité de l'utilisateur n'est pas trouvée
         echo "Unité de l'utilisateur non trouvée.";
@@ -78,6 +125,17 @@ if ($MATRICULE) {
     // Rediriger vers la page de connexion si l'utilisateur n'est pas authentifié
     header("Location: login.php");
     exit();
+}
+
+// Vérifier si le salarié connecté a des objectifs affectés
+$sql = "SELECT COUNT(*) as count FROM evaluation WHERE MATRICULE = ?";
+$stmt = $conn->prepare($sql);
+if ($stmt) {
+    $stmt->bind_param("s", $MATRICULE);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $objectivesCount = $row['count'];
 }
 
 $conn->close();
@@ -199,8 +257,207 @@ $(function() {
     }
   });
 });
+
+function checkObjectives() {
+    <?php if ($is_dsi): ?>
+        return true; // Le DSI a toujours accès
+    <?php else: ?>
+        <?php if ($objectivesCount == 0): ?>
+            alert('Veuillez contacter vos supérieurs hiérarchiques pour définir vos objectifs s\'il vous plaît.');
+            return false;
+        <?php endif; ?>
+    <?php endif; ?>
+    return true;
+}
+
+function nextSection(sectionNumber) {
+    if (checkObjectives()) {
+        document.querySelectorAll('.section').forEach(section => {
+            section.classList.remove('active');
+        });
+        document.getElementById('section' + sectionNumber).classList.add('active');
+    }
+}
+
+function previousSection(sectionNumber) {
+    if (checkObjectives()) {
+        document.querySelectorAll('.section').forEach(section => {
+            section.classList.remove('active');
+        });
+        document.getElementById('section' + sectionNumber).classList.add('active');
+    }
+}
+
+function addObjective() {
+    if (checkObjectives()) {
+        // Ajout d'un nouvel objectif
+        var description = document.getElementById('objectiveDescription').value;
+        var performanceIndicator = document.getElementById('performanceIndicator').value;
+        var weighting = document.getElementById('objectiveWeighting').value;
+
+        if (description && performanceIndicator && weighting) {
+            var table = document.getElementById('transversalObjectivesTable').getElementsByTagName('tbody')[0];
+            var newRow = table.insertRow();
+            var descriptionCell = newRow.insertCell(0);
+            var performanceIndicatorCell = newRow.insertCell(1);
+            var weightingCell = newRow.insertCell(2);
+            var statusCell = newRow.insertCell(3);
+            var updateCell = newRow.insertCell(4);
+            var deleteCell = newRow.insertCell(5);
+
+            descriptionCell.innerHTML = description;
+            performanceIndicatorCell.innerHTML = performanceIndicator;
+            weightingCell.innerHTML = weighting;
+            statusCell.innerHTML = '<select class="form-control"><option value="Actif">Actif</option><option value="Inactif">Inactif</option></select>';
+            updateCell.innerHTML = '<button class="btn btn-warning" onclick="updateObjective(this)">Modifier</button>';
+            deleteCell.innerHTML = '<button class="btn btn-danger" onclick="deleteObjective(this)">Supprimer</button>';
+
+            // Réinitialiser le formulaire
+            document.getElementById('addObjectiveForm').reset();
+        } else {
+            alert('Veuillez remplir tous les champs.');
+        }
+    }
+}
+
+function saveTransversalObjectives() {
+    if (checkObjectives()) {
+        var table = document.getElementById('transversalObjectivesTable');
+        var totalWeighting = 0;
+        for (var i = 1; i < table.rows.length; i++) {
+            totalWeighting += parseInt(table.rows[i].cells[2].innerHTML);
+        }
+        if (totalWeighting === 100) {
+            // Collect the objectives data
+            var objectives = [];
+            for (var i = 1; i < table.rows.length; i++) {
+                var row = table.rows[i];
+                var objective = {
+                    description: row.cells[0].innerHTML,
+                    performanceIndicator: row.cells[1].innerHTML,
+                    weighting: row.cells[2].innerHTML,
+                    status: row.cells[3].querySelector('select').value
+                };
+                objectives.push(objective);
+            }
+
+            // Send the data via AJAX
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', 'save_transversal_objectives.php', true);
+            xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    var response = JSON.parse(xhr.responseText);
+                    alert(response.message);
+                }
+            };
+            xhr.send(JSON.stringify({objectives: objectives, category: 'tache principale'}));
+        } else {
+            alert('La somme des pondérations doit être égale à 100%. Actuelle : ' + totalWeighting + '%.');
+        }
+    }
+}
+
+function saveDailyPerformance() {
+    <?php if ($is_dsi): ?>
+        // Pour le DSI, pas de vérification de la somme des pondérations
+        var form = document.getElementById('dailyPerformanceForm');
+        var formData = new FormData(form);
+        // ... reste du code de sauvegarde ...
+    <?php else: ?>
+        if (checkObjectives()) {
+            var form = document.getElementById('dailyPerformanceForm');
+            var formData = new FormData(form);
+            var totalWeighting = 0;
+
+            // Calculer la somme des pondérations
+            formData.forEach((value, key) => {
+                if (key === 'ponderation') {
+                    totalWeighting += parseInt(value);
+                }
+            });
+
+            if (totalWeighting === 100) {
+                // Récupérer les données des performances
+                var performances = [];
+                form.querySelectorAll('tbody tr').forEach(row => {
+                    var performance = {
+                        description: row.cells[0].innerHTML,
+                        weighting: row.cells[1].querySelector('input').value,
+                        status: row.cells[2].querySelector('select').value
+                    };
+                    performances.push(performance);
+                });
+
+                // Afficher les données à envoyer dans la console pour vérification
+                console.log("Performances to send:", performances);
+
+                // Envoyer les données via AJAX
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'save_daily_performances.php', true);
+                xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState === 4) {
+                        console.log("Response from save_daily_performances.php:", xhr.responseText);
+                        var response = JSON.parse(xhr.responseText);
+                        alert(response.message);
+
+                        // Envoyer les données à assign_daily_performances.php après avoir enregistré les performances
+                        sendData(performances);
+                    }
+                };
+                xhr.send(JSON.stringify({ performances: performances }));
+            } else {
+                alert('La somme des pondérations doit être égale à 100%. Actuelle : ' + totalWeighting + '%.');
+            }
+        }
+    <?php endif; ?>
+}
+
+function savecompetence() {
+    <?php if ($is_dsi): ?>
+        // Pour le DSI, accès direct à la sauvegarde
+        var form = document.getElementById('competenceForm');
+        var formData = new FormData(form);
+        // ... reste du code de sauvegarde ...
+    <?php else: ?>
+        if (checkObjectives()) {
+            var form = document.getElementById('competenceForm');
+            var formData = new FormData(form);
+
+            // Récupérer les données des competences
+            var competences = [];
+            form.querySelectorAll('tbody tr').forEach(row => {
+                var competence = {
+                    description: row.cells[0].innerHTML,
+                    niveau_requis: row.cells[1].querySelector('input').value,
+                    status: row.cells[2].querySelector('select').value
+                };
+                competences.push(competence);
+            });
+
+            // Afficher les données à envoyer dans la console pour vérification
+            console.log("Data to send to save_competence.php:", JSON.stringify({ competences: competences }));
+
+            // Envoyer les données via AJAX
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', 'save_competence.php', true);
+            xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    console.log("Response from save_competence.php:", xhr.responseText);
+                    var response = JSON.parse(xhr.responseText);
+                    alert(response.message);
+
+                    // Envoyer les données à assign_competences.php après avoir enregistré les competence
+                    sendData(competences);
+                }
+            };
+            xhr.send(JSON.stringify({ competences: competences }));
+        }
+    <?php endif; ?>
+}
 </script>
-</style>
 </head>
 
 <body ng-app="myApp">
@@ -220,7 +477,7 @@ $(function() {
     </div>
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav" id="bs-example-navbar-collapse-1">
-      <li><a href="#carousel">Accueil <span class="fa fa-home fa-lg ms-2"></span></a></li>
+      <li><a href="main.php">Accueil <span class="fa fa-home fa-lg ms-2"></span></a></li>
       <li class="dropdown menu-admin">
           <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Gestion des évaluations <span class="caret"></span></a>
           <ul class="dropdown-menu">
@@ -240,7 +497,7 @@ $(function() {
             <li class="menu-admin"><a href="autoevaluation.php">Autoevaluation</a></li>
             <li><a href="evaluation31.php">Evaluer un collaborateur</a></li>
             <li><a href="modifier31.php">Modifier une evaluation</a></li>
-            <li><a href="">Valider une evaluation</a></li>
+            <li><a href="valider_evaluation.php">Valider une evaluation</a></li>
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Rapport</li>
             <li><a href="">Rapport individuel</a></li>
@@ -254,7 +511,7 @@ $(function() {
       </ul>
       <ul class="nav navbar-nav navbar-right">
     <li><a href="mes_infos.php">Mes infos <span class="fa fa-user fa-lg me-2"></span></a></li>
-    <li><a href="">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
+    <li><a href="index.php">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
 </ul>
 
     </div>
@@ -266,7 +523,7 @@ $(function() {
         <h1>Gestion des paramètres</h1>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="main-menu.html">Accueil</a></li>
+                <li class="breadcrumb-item"><a href="main.php">Accueil</a></li>
                 <li class="breadcrumb-item active" aria-current="page">Gestion des évaluations</li>
                 <li class="breadcrumb-item active" aria-current="page">Gestion des paramètres</li>
             </ol>
@@ -277,7 +534,47 @@ $(function() {
         
         <div id="section1" class="section active">
         <div class="form-group">
-            <h4>Definissez des objectifs pour vos collaborateurs</h4>
+            <h4>Définissez des objectifs pour vos collaborateurs</h4>
+            <?php if (!$is_dsi): ?>
+                <?php if ($objectivesCount > 0): ?>
+                    <div class="form-group">
+                        <h5>Voici vos objectifs :</h5>
+                        <button class="btn btn-info" onclick="toggleObjectives()">Afficher/Masquer les objectifs</button>
+                        <div id="objectives-container" style="max-height: 400px; overflow-y: auto; display: none;">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th>Indicateur de performance</th>
+                                        <th>Pondération</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php
+                                    // Récupérer les objectifs affectés au salarié connecté
+                                    $conn = new mysqli($servername, $username, $password, $dbname);
+                                    $sql = "SELECT o.description, o.indicateur_performance, e.ponderation, o.statut FROM objectif o JOIN evaluation e ON o.id = e.ID_OBJECTIF WHERE e.matricule = ?";
+                                    $stmt = $conn->prepare($sql);
+                                    $stmt->bind_param("s", $MATRICULE);
+                                    $stmt->execute();
+                                    $result = $stmt->get_result();
+                                    while ($row = $result->fetch_assoc()): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($row['description']); ?></td>
+                                            <td><?php echo htmlspecialchars($row['indicateur_performance']); ?></td>
+                                            <td><?php echo htmlspecialchars($row['ponderation']); ?></td>
+                                            <td><?php echo htmlspecialchars($row['statut']); ?></td>
+                                        </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <p>Vous n'avez pas d'objectifs.</p>
+                <?php endif; ?>
+            <?php endif; ?>
         </div>
 
             <div id="objective-container" class="container">
@@ -300,7 +597,6 @@ $(function() {
                 <table class="table table-bordered" id="transversalObjectivesTable">
                     <thead>
                         <tr>
-                            <th>ID Objectif</th>
                             <th>Description</th>
                             <th>Indicateur de performance</th>
                             <th>Pondération</th>
@@ -328,7 +624,6 @@ $(function() {
                 <table class="table table-bordered">
                     <thead>
                         <tr>
-                            <th>ID Performance</th>
                             <th>Description</th>
                             <th>Pondération</th>
                             <th>Statut</th>
@@ -337,7 +632,6 @@ $(function() {
                     <tbody>
                         <?php foreach ($dailyPerformanceObjectives as $objective): ?>
                             <tr>
-                                <td><?php echo $objective['id']; ?></td>
                                 <td><?php echo $objective['description']; ?></td>
                                 <td>
                                     <input type="number" name="ponderation" class="form-control ponderation-input" value="<?php echo $objective['ponderation']; ?>">
@@ -370,7 +664,6 @@ $(function() {
         <table class="table table-bordered">
             <thead>
                 <tr>
-                    <th>ID Competence</th>
                     <th>Description</th>
                     <th>Niveau réquis</th>
                     <th>Statut</th>
@@ -379,7 +672,6 @@ $(function() {
             <tbody>
                 <?php foreach ($competenceObjectives as $objective): ?>
                     <tr>
-                        <td><?php echo htmlspecialchars($objective['id']); ?></td>
                         <td><?php echo htmlspecialchars($objective['description']); ?></td>
                         <td>
                             <input type="number" name="niveau_requis" class="form-control niveau_requis-input" value="<?php echo htmlspecialchars($objective['niveau_requis']); ?>">
@@ -400,6 +692,7 @@ $(function() {
         <button class="btn btn-primary" onclick="savecompetence()">Enregistrer</button>
     </div>
  </div>
+
 </div>
 
     </div>
@@ -449,48 +742,52 @@ $(function() {
 
     // Script pour la gestion des sections
     function nextSection(sectionNumber) {
-        document.querySelectorAll('.section').forEach(section => {
-            section.classList.remove('active');
-        });
-        document.getElementById('section' + sectionNumber).classList.add('active');
+        if (checkObjectives()) {
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById('section' + sectionNumber).classList.add('active');
+        }
     }
 
     function previousSection(sectionNumber) {
-        document.querySelectorAll('.section').forEach(section => {
-            section.classList.remove('active');
-        });
-        document.getElementById('section' + sectionNumber).classList.add('active');
+        if (checkObjectives()) {
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById('section' + sectionNumber).classList.add('active');
+        }
     }
 
     // Ajout d'un nouvel objectif
     function addObjective() {
-        var description = document.getElementById('objectiveDescription').value;
-        var performanceIndicator = document.getElementById('performanceIndicator').value;
-        var weighting = document.getElementById('objectiveWeighting').value;
+        if (checkObjectives()) {
+            var description = document.getElementById('objectiveDescription').value;
+            var performanceIndicator = document.getElementById('performanceIndicator').value;
+            var weighting = document.getElementById('objectiveWeighting').value;
 
-        if (description && performanceIndicator && weighting) {
-            var table = document.getElementById('transversalObjectivesTable').getElementsByTagName('tbody')[0];
-            var newRow = table.insertRow();
-            var idCell = newRow.insertCell(0);
-            var descriptionCell = newRow.insertCell(1);
-            var performanceIndicatorCell = newRow.insertCell(2);
-            var weightingCell = newRow.insertCell(3);
-            var statusCell = newRow.insertCell(4);
-            var updateCell = newRow.insertCell(5);
-            var deleteCell = newRow.insertCell(6);
+            if (description && performanceIndicator && weighting) {
+                var table = document.getElementById('transversalObjectivesTable').getElementsByTagName('tbody')[0];
+                var newRow = table.insertRow();
+                var descriptionCell = newRow.insertCell(0);
+                var performanceIndicatorCell = newRow.insertCell(1);
+                var weightingCell = newRow.insertCell(2);
+                var statusCell = newRow.insertCell(3);
+                var updateCell = newRow.insertCell(4);
+                var deleteCell = newRow.insertCell(5);
 
-            idCell.innerHTML = table.rows.length;
-            descriptionCell.innerHTML = description;
-            performanceIndicatorCell.innerHTML = performanceIndicator;
-            weightingCell.innerHTML = weighting;
-            statusCell.innerHTML = '<select class="form-control"><option value="Actif">Actif</option><option value="Inactif">Inactif</option></select>';
-            updateCell.innerHTML = '<button class="btn btn-warning" onclick="updateObjective(this)">Modifier</button>';
-            deleteCell.innerHTML = '<button class="btn btn-danger" onclick="deleteObjective(this)">Supprimer</button>';
+                descriptionCell.innerHTML = description;
+                performanceIndicatorCell.innerHTML = performanceIndicator;
+                weightingCell.innerHTML = weighting;
+                statusCell.innerHTML = '<select class="form-control"><option value="Actif">Actif</option><option value="Inactif">Inactif</option></select>';
+                updateCell.innerHTML = '<button class="btn btn-warning" onclick="updateObjective(this)">Modifier</button>';
+                deleteCell.innerHTML = '<button class="btn btn-danger" onclick="deleteObjective(this)">Supprimer</button>';
 
-            // Réinitialiser le formulaire
-            document.getElementById('addObjectiveForm').reset();
-        } else {
-            alert('Veuillez remplir tous les champs.');
+                // Réinitialiser le formulaire
+                document.getElementById('addObjectiveForm').reset();
+            } else {
+                alert('Veuillez remplir tous les champs.');
+            }
         }
     }
 
@@ -516,167 +813,171 @@ $(function() {
 
     // Enregistrer les objectifs transversaux
     function saveTransversalObjectives() {
-    var table = document.getElementById('transversalObjectivesTable');
-    var totalWeighting = 0;
-    for (var i = 1; i < table.rows.length; i++) {
-        totalWeighting += parseInt(table.rows[i].cells[3].innerHTML);
-    }
-    if (totalWeighting === 100) {
-        // Collect the objectives data
-        var objectives = [];
-        for (var i = 1; i < table.rows.length; i++) {
-            var row = table.rows[i];
-            var objective = {
-                id: row.cells[0].innerHTML,
-                description: row.cells[1].innerHTML,
-                performanceIndicator: row.cells[2].innerHTML,
-                weighting: row.cells[3].innerHTML,
-                status: row.cells[4].querySelector('select').value
-            };
-            objectives.push(objective);
-        }
-
-        // Send the data via AJAX
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', 'save_transversal_objectives.php', true);
-        xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) {
-                var response = JSON.parse(xhr.responseText);
-                alert(response.message);
+        if (checkObjectives()) {
+            var table = document.getElementById('transversalObjectivesTable');
+            var totalWeighting = 0;
+            for (var i = 1; i < table.rows.length; i++) {
+                totalWeighting += parseInt(table.rows[i].cells[2].innerHTML);
             }
-        };
-        xhr.send(JSON.stringify({objectives: objectives, category: 'tache principale'}));
-    } else {
-        alert('La somme des pondérations doit être égale à 100%. Actuelle : ' + totalWeighting + '%.');
-    }
-}
+            if (totalWeighting === 100) {
+                // Collect the objectives data
+                var objectives = [];
+                for (var i = 1; i < table.rows.length; i++) {
+                    var row = table.rows[i];
+                    var objective = {
+                        description: row.cells[0].innerHTML,
+                        performanceIndicator: row.cells[1].innerHTML,
+                        weighting: row.cells[2].innerHTML,
+                        status: row.cells[3].querySelector('select').value
+                    };
+                    objectives.push(objective);
+                }
 
-// Enregistrer les performances quotidiennes
-function saveDailyPerformance() {
-    var form = document.getElementById('dailyPerformanceForm');
-    var formData = new FormData(form);
-    var totalWeighting = 0;
-
-    // Calculer la somme des pondérations
-    formData.forEach((value, key) => {
-        if (key === 'ponderation') {
-            totalWeighting += parseInt(value);
+                // Send the data via AJAX
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'save_transversal_objectives.php', true);
+                xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState === 4) {
+                        var response = JSON.parse(xhr.responseText);
+                        alert(response.message);
+                    }
+                };
+                xhr.send(JSON.stringify({objectives: objectives, category: 'tache principale'}));
+            } else {
+                alert('La somme des pondérations doit être égale à 100%. Actuelle : ' + totalWeighting + '%.');
+            }
         }
-    });
+    }
 
-    if (totalWeighting === 100) {
-        // Récupérer les données des performances
-        var performances = [];
-        form.querySelectorAll('tbody tr').forEach(row => {
-            var performance = {
-                id: row.cells[0].innerHTML,
-                description: row.cells[1].innerHTML,
-                weighting: row.cells[2].querySelector('input').value,
-                status: row.cells[3].querySelector('select').value
-            };
-            performances.push(performance);
-        });
+    // Enregistrer les performances quotidiennes
+    function saveDailyPerformance() {
+        <?php if ($is_dsi): ?>
+            // Pour le DSI, pas de vérification de la somme des pondérations
+            var form = document.getElementById('dailyPerformanceForm');
+            var formData = new FormData(form);
+            // ... reste du code de sauvegarde ...
+        <?php else: ?>
+            if (checkObjectives()) {
+                var form = document.getElementById('dailyPerformanceForm');
+                var formData = new FormData(form);
+                var totalWeighting = 0;
 
+                // Calculer la somme des pondérations
+                formData.forEach((value, key) => {
+                    if (key === 'ponderation') {
+                        totalWeighting += parseInt(value);
+                    }
+                });
+
+                if (totalWeighting === 100) {
+                    // Récupérer les données des performances
+                    var performances = [];
+                    form.querySelectorAll('tbody tr').forEach(row => {
+                        var performance = {
+                            description: row.cells[0].innerHTML,
+                            weighting: row.cells[1].querySelector('input').value,
+                            status: row.cells[2].querySelector('select').value
+                        };
+                        performances.push(performance);
+                    });
+
+                    // Afficher les données à envoyer dans la console pour vérification
+                    console.log("Performances to send:", performances);
+
+                    // Envoyer les données via AJAX
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'save_daily_performances.php', true);
+                    xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+                    xhr.onreadystatechange = function () {
+                        if (xhr.readyState === 4) {
+                            console.log("Response from save_daily_performances.php:", xhr.responseText);
+                            var response = JSON.parse(xhr.responseText);
+                            alert(response.message);
+
+                            // Envoyer les données à assign_daily_performances.php après avoir enregistré les performances
+                            sendData(performances);
+                        }
+                    };
+                    xhr.send(JSON.stringify({ performances: performances }));
+                } else {
+                    alert('La somme des pondérations doit être égale à 100%. Actuelle : ' + totalWeighting + '%.');
+                }
+            }
+        <?php endif; ?>
+    }
+
+    // Fonction pour envoyer les données à assign_daily_performances.php
+    function sendData(performances) {
         // Afficher les données à envoyer dans la console pour vérification
-        console.log("Performances to send:", performances);
+        console.log("Data to send to assign_daily_performances.php:", JSON.stringify({ performances: performances }));
 
-        // Envoyer les données via AJAX
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', 'save_daily_performances.php', true);
-        xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) {
-                console.log("Response from save_daily_performances.php:", xhr.responseText);
-                var response = JSON.parse(xhr.responseText);
-                alert(response.message);
-
-                // Envoyer les données à assign_daily_performances.php après avoir enregistré les performances
-                sendData(performances);
+        var xhrAssign = new XMLHttpRequest();
+        xhrAssign.open('POST', 'assign_daily_performances.php', true);
+        xhrAssign.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+        xhrAssign.onreadystatechange = function () {
+            if (xhrAssign.readyState === 4) {
+                console.log("Response from assign_daily_performances.php:", xhrAssign.responseText);
+                var responseAssign = JSON.parsestringify()(xhrAssign.responseText);
+                alert(responseAssign.message);
             }
         };
-        xhr.send(JSON.stringify({ performances: performances }));
-    } else {
-        alert('La somme des pondérations doit être égale à 100%. Actuelle : ' + totalWeighting + '%.');
+        xhrAssign.send(JSON.stringify({ performances: performances }));
     }
-}
 
-// Fonction pour envoyer les données à assign_daily_performances.php
-function sendData(performances) {
-    // Afficher les données à envoyer dans la console pour vérification
-    console.log("Data to send to assign_daily_performances.php:", JSON.stringify({ performances: performances }));
+    // Enregistrer les compétences
+    function savecompetence() {
+        <?php if ($is_dsi): ?>
+            // Pour le DSI, accès direct à la sauvegarde
+            var form = document.getElementById('competenceForm');
+            var formData = new FormData(form);
+            // ... reste du code de sauvegarde ...
+        <?php else: ?>
+            if (checkObjectives()) {
+                var form = document.getElementById('competenceForm');
+                var formData = new FormData(form);
 
-    var xhrAssign = new XMLHttpRequest();
-    xhrAssign.open('POST', 'assign_daily_performances.php', true);
-    xhrAssign.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
-    xhrAssign.onreadystatechange = function () {
-        if (xhrAssign.readyState === 4) {
-            console.log("Response from assign_daily_performances.php:", xhrAssign.responseText);
-            var responseAssign = JSON.parsestringify()(xhrAssign.responseText);
-            alert(responseAssign.message);
+                // Récupérer les données des competences
+                var competences = [];
+                form.querySelectorAll('tbody tr').forEach(row => {
+                    var competence = {
+                        description: row.cells[0].innerHTML,
+                        niveau_requis: row.cells[1].querySelector('input').value,
+                        status: row.cells[2].querySelector('select').value
+                    };
+                    competences.push(competence);
+                });
+
+                // Afficher les données à envoyer dans la console pour vérification
+                console.log("Data to send to save_competence.php:", JSON.stringify({ competences: competences }));
+
+                // Envoyer les données via AJAX
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'save_competence.php', true);
+                xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState === 4) {
+                        console.log("Response from save_competence.php:", xhr.responseText);
+                        var response = JSON.parse(xhr.responseText);
+                        alert(response.message);
+
+                        // Envoyer les données à assign_competences.php après avoir enregistré les competence
+                        sendData(competences);
+                    }
+                };
+                xhr.send(JSON.stringify({ competences: competences }));
+            }
+        <?php endif; ?>
+    }
+
+    function toggleObjectives() {
+        const objectivesContainer = document.getElementById('objectives-container');
+        if (objectivesContainer.style.display === 'none') {
+            objectivesContainer.style.display = 'block';
+        } else {
+            objectivesContainer.style.display = 'none';
         }
-    };
-    xhrAssign.send(JSON.stringify({ performances: performances }));
-}
-
-
-// Enregistrer les compétences
-// Enregistrer les compétences
-function savecompetence() {
-    var form = document.getElementById('competenceForm');
-    var formData = new FormData(form);
-
-    // Récupérer les données des competences
-    var competences = [];
-    form.querySelectorAll('tbody tr').forEach(row => {
-        var competence = {
-            id: row.cells[0].innerHTML,
-            description: row.cells[1].innerHTML,
-            niveau_requis: row.cells[2].querySelector('input').value,
-            status: row.cells[3].querySelector('select').value
-        };
-        competences.push(competence);
-    });
-
-    // Afficher les données à envoyer dans la console pour vérification
-    console.log("Data to send to save_competence.php:", JSON.stringify({ competences: competences }));
-
-    // Envoyer les données via AJAX
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', 'save_competence.php', true);
-    xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4) {
-            console.log("Response from save_competence.php:", xhr.responseText);
-            var response = JSON.parse(xhr.responseText);
-            alert(response.message);
-
-            // Envoyer les données à assign_competences.php après avoir enregistré les competence
-            sendData(competences);
-        }
-    };
-    xhr.send(JSON.stringify({ competences: competences }));
-}
-
-// Fonction pour envoyer les données à assign_competence.php
-function sendData(competences) {
-    // Afficher les données à envoyer dans la console pour vérification
-    console.log("Data to send to assign_competence.php:", JSON.stringify({ competences: competences }));
-
-    var xhrAssign = new XMLHttpRequest();
-    xhrAssign.open('POST', 'assign_competence.php', true);
-    xhrAssign.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
-    xhrAssign.onreadystatechange = function () {
-        if (xhrAssign.readyState === 4) {
-            console.log("Response from assign_competence.php:", xhrAssign.responseText);
-            var responseAssign = JSON.parse(xhrAssign.responseText);
-            alert(responseAssign.message);
-        }
-    };
-    xhrAssign.send(JSON.stringify({ competences: competences }));
-}
-//de
-
+    }
 </script>
 
 </body>

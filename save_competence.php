@@ -20,17 +20,39 @@ if (isset($data['competences']) && is_array($data['competences'])) {
         $description = $competence['description'];
         $niveau_requis = $competence['niveau_requis'];
         $status = $competence['status'];
-        $Val_RH=false;
+        $Val_RH = false;
 
-        $sql = "INSERT INTO objectif (id, description, niveau_requis, statut, categorie,Val_RG) 
-                VALUES ('$id', '$description', '$niveau_requis', '$status', 'competence','$Val_RH')
-                ON DUPLICATE KEY UPDATE
-                description = '$description', niveau_requis = '$niveau_requis', statut = '$status', categorie = 'competence ','$Val_RH'";
+        // Vérifier si la compétence existe déjà
+        $sql_check = "SELECT COUNT(*) as total FROM objectif WHERE id = ?";
+        $stmt_check = $conn->prepare($sql_check);
+        $stmt_check->bind_param("s", $id);
+        $stmt_check->execute();
+        $stmt_check->bind_result($total);
+        $stmt_check->fetch();
+        $stmt_check->close();
 
-        if ($conn->query($sql) === TRUE) {
-            $response['message'] = "Les competences  ont été enregistrées avec succès.";
+        if ($total > 0) {
+            // Si la compétence existe déjà, mettre à jour les informations
+            $sql_update = "UPDATE objectif SET description = ?, niveau_requis = ?, statut = ?, categorie = 'competence', Val_RH = ? WHERE id = ?";
+            $stmt_update = $conn->prepare($sql_update);
+            $stmt_update->bind_param("ssssi", $description, $niveau_requis, $status, $Val_RH, $id);
+            if ($stmt_update->execute()) {
+                $response['message'] = "Les compétences ont été mises à jour avec succès.";
+            } else {
+                $response['message'] = "Erreur : " . $stmt_update->error;
+            }
+            $stmt_update->close();
         } else {
-            $response['message'] = "Erreur : " . $conn->error;
+            // Si la compétence n'existe pas, insérer une nouvelle compétence
+            $sql_insert = "INSERT INTO objectif (id, description, niveau_requis, statut, categorie, Val_RH) VALUES (?, ?, ?, ?, 'competence', ?)";
+            $stmt_insert = $conn->prepare($sql_insert);
+            $stmt_insert->bind_param("ssssi", $id, $description, $niveau_requis, $status, $Val_RH);
+            if ($stmt_insert->execute()) {
+                $response['message'] = "Les compétences ont été enregistrées avec succès.";
+            } else {
+                $response['message'] = "Erreur : " . $stmt_insert->error;
+            }
+            $stmt_insert->close();
         }
     }
 } else {

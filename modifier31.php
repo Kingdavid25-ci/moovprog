@@ -1,42 +1,54 @@
 <?php
 session_start();
+include('db_connection.php');
 
-// Paramètres de connexion à la base de données
-$servername = "localhost";
-$username = "root";
-$password = "";
-// $dbname = "moov_africa_test";
-$dbname = "moovprog";
-
-// Créer une connexion à la base de données
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-// Vérifier la connexion
-if ($conn->connect_error) {
-    die("Échec de la connexion : " . $conn->connect_error);
+// Vérifier si l'utilisateur est authentifié
+if (!isset($_SESSION['user_name'])) {
+    header('Location: login.php');
+    exit();
 }
 
-// Matricule de l'utilisateur connecté
-$matricule = $_SESSION['user_name'];
+// MATRICULE de l'utilisateur connecté
+$MATRICULE = $_SESSION['user_name'];
 
-$salaries = [];
-
-// Préparer et exécuter la requête pour récupérer les salariés sous la supervision de l'utilisateur connecté
-$sql = "SELECT matricule, NOM, PRENOM FROM salarie WHERE superieur_hierarchique = ?";
+// Récupérer l'ID du poste de l'utilisateur connecté
+$sql = "SELECT id_poste FROM affectation WHERE matricule = ?";
 $stmt = $conn->prepare($sql);
-if ($stmt) {
-    $stmt->bind_param("s", $matricule);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    // Stocker les résultats dans un tableau
-    while ($row = $result->fetch_assoc()) {
-        $salaries[] = $row;
-    }
-    
-    $stmt->close();
+$stmt->bind_param("s", $MATRICULE);
+$stmt->execute();
+$stmt->bind_result($id_poste);
+$stmt->fetch();
+$stmt->close();
+
+// Vérifiez si l'ID du poste a été récupéré correctement
+if (!$id_poste) {
+    echo "<script>alert('Erreur : ID du poste non trouvé pour l'utilisateur connecté.'); window.location.href = 'login.php';</script>";
+    exit();
 }
 
+// Vérifier si l'utilisateur a des subordonnés
+$sql = "SELECT COUNT(*) as total FROM salarie WHERE superieur_hierarchique = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $id_poste);
+$stmt->execute();
+$stmt->bind_result($total);
+$stmt->fetch();
+$stmt->close();
+
+// Si l'utilisateur n'a pas de subordonnés, afficher un message d'erreur et rediriger
+if ($total == 0) {
+    echo "<script>alert('Vous n\'avez pas accès à cette interface.'); window.location.href = 'main.php';</script>";
+    exit();
+}
+
+// Récupérer les subordonnés de l'utilisateur connecté
+$sql = "SELECT matricule, nom, prenom FROM salarie WHERE superieur_hierarchique = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $id_poste);
+$stmt->execute();
+$result = $stmt->get_result();
+$subordinates = $result->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
 $conn->close();
 ?>
 <!doctype html>
@@ -44,7 +56,7 @@ $conn->close();
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title> Modification des Évaluations des Subordonnés</title>
+<title>Modification des Évaluations des Subordonnés</title>
 <link rel="icon" type="image/png" href="images/logo48.png" />
 <link rel="stylesheet" type="text/css" href="css/body.css">
 <link rel="stylesheet" type="text/css" href="css/chrome.css">
@@ -73,7 +85,6 @@ $conn->close();
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <style type="text/css">
-  
 @font-face {
   font-family: 'Material Icons';
   font-style: normal;
@@ -124,116 +135,122 @@ $conn->close();
 .section { display: none; }
 .section.active { display: block; }
 
-        
-    .narrow-select {
-        width: 300px; /* Ajustez cette valeur selon vos besoins */
-    }
-
+.narrow-select {
+    width: 300px; /* Ajustez cette valeur selon vos besoins */
+}
 </style>
 <script>
-        // Fonction pour récupérer les données des salariés
-        function fetchEmployeeData(matricule) {
-            console.log('Fetching data for matricule:', matricule); // Ajoutez cette ligne pour vérifier la valeur du matricule
-            if (matricule) {
-                fetch('fetch_employee_data_for_modif.php?matricule=' + matricule)
-                    .then(response => response.json())
-                    .then(data => {
-                        populateTachePrincipale(data.tachePrincipale);
-                        populatePerformanceQuotidienne(data.performanceQuotidienne);
-                        populateCompetence(data.competence);
-                        showSection('section1');
-                    });
+    // Fonction pour récupérer les données des salariés
+    function fetchEmployeeData(matricule) {
+        console.log('Fetching data for matricule:', matricule); // Ajoutez cette ligne pour vérifier la valeur du matricule
+        if (matricule) {
+            fetch('fetch_employee_data_for_modif.php?matricule=' + matricule)
+                .then(response => response.json())
+                .then(data => {
+                    populateTachePrincipale(data.tachePrincipale);
+                    populatePerformanceQuotidienne(data.performanceQuotidienne);
+                    populateCompetence(data.competence);
+                    showSection('section1');
+                });
+        }
+    }
+
+    // Fonction pour afficher une section spécifique
+    function showSection(sectionId) {
+        document.querySelectorAll('.section').forEach(section => {
+            section.classList.remove('active');
+        });
+        document.getElementById(sectionId).classList.add('active');
+    }
+
+    // Fonction pour remplir le tableau "Tâche Principale"
+    function populateTachePrincipale(data) {
+        let tableBody = document.getElementById('tachePrincipaleBody');
+        tableBody.innerHTML = ''; // Effacer les données existantes
+        data.forEach(row => {
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${row.description}</td>
+                    <td>${row.indicateur_performance}</td>
+                    <td><input type="text" name="ponderation[]" value="${row.ponderation}" /></td>
+                    <td>${row.autoevaluation_objectif}</td>
+                    <td><input type="text" name="note_objectif[]" value="${row.note_objectif}" /></td>
+                    <input type="hidden" name="id_objectif[]" value="${row.id}" />
+                </tr>
+            `;
+        });
+    }
+
+    // Fonction pour remplir le tableau "Performance Quotidienne"
+    function populatePerformanceQuotidienne(data) {
+        let tableBody = document.getElementById('performanceQuotidienneBody');
+        tableBody.innerHTML = ''; // Effacer les données existantes
+        data.forEach(row => {
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${row.description}</td>
+                    <td><input type="text" name="ponderation[]" value="${row.ponderation}" /></td>
+                    <td><input type="text" name="AUTO_EVALUATION_PERFORM[]" value="${row.AUTO_EVALUATION_PERFORM}" /></td>
+                    <td><input type="text" name="NOTE_EVALUATEUR[]" value="${row.NOTE_EVALUATEUR}" /></td>
+                    <input type="hidden" name="id_performance[]" value="${row.id}" />
+                </tr>
+            `;
+        });
+    }
+
+    // Fonction pour remplir le tableau "Compétence"
+    function populateCompetence(data) {
+        let tableBody = document.getElementById('competenceBody');
+        tableBody.innerHTML = ''; // Effacer les données existantes
+        data.forEach(row => {
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${row.description}</td>
+                    <td class="niveau-requis">${row.niveau_requis}</td>
+                    <td><input type="text" name="niveau_capacite[]" class="niveau-capacite" value="${row.niveau_capacite}" oninput="calculateCapacityLacunes(this.closest('tr'))" /></td>
+                    <td class="capacite-lacunes">${row.niveau_requis - row.niveau_capacite}</td>
+                    <td><input type="text" name="COMMENTAIRE[]" value="${row.COMMENTAIRE}" /></td>
+                    <input type="hidden" name="id_competence[]" value="${row.id}" />
+                </tr>
+            `;
+        });
+    }
+
+    // Calculer la capacité et les lacunes
+    function calculateCapacityLacunes(row) {
+        const niveauRequis = parseFloat(row.querySelector('.niveau-requis').textContent);
+        const niveauCapaciteInput = row.querySelector('.niveau-capacite');
+        const capaciteLacunesCell = row.querySelector('.capacite-lacunes');
+
+        let niveauCapacite = parseFloat(niveauCapaciteInput.value) || 0;
+        capaciteLacunesCell.textContent = niveauCapacite - niveauRequis;
+    }
+
+    // Initialise l'affichage pour la section "Tâche Principale"
+    document.addEventListener("DOMContentLoaded", function () {
+        showSection('section1');
+    });
+
+    // Met à jour le champ matricule caché à chaque sélection de salarié
+    document.getElementById('salarie').addEventListener('change', function () {
+        var matricule = this.value;
+        console.log('Selected matricule:', matricule); // Vérifiez la valeur du matricule
+        document.getElementById('selectedMatricule1').value = matricule;
+        document.getElementById('selectedMatricule2').value = matricule;
+        document.getElementById('selectedMatricule3').value = matricule;
+    });
+
+    function validateNotes() {
+        const noteInputs = document.querySelectorAll('input[name="note_objectif[]"], input[name="NOTE_EVALUATEUR[]"], input[name="niveau_capacite[]"]');
+        for (let input of noteInputs) {
+            if (!/^\d+$/.test(input.value)) {
+                alert('Entrez des valeurs numériques s\'il vous plaît.');
+                return false;
             }
         }
-
-        // Fonction pour afficher une section spécifique
-        function showSection(sectionId) {
-            document.querySelectorAll('.section').forEach(section => {
-                section.classList.remove('active');
-            });
-            document.getElementById(sectionId).classList.add('active');
-        }
-
-        // Fonction pour remplir le tableau "Tâche Principale"
-        function populateTachePrincipale(data) {
-            let tableBody = document.getElementById('tachePrincipaleBody');
-            tableBody.innerHTML = ''; // Effacer les données existantes
-            data.forEach(row => {
-                tableBody.innerHTML += `
-                    <tr>
-                        <td>${row.description}</td>
-                        <td>${row.indicateur_performance}</td>
-                        <td><input type="text" name="ponderation[]" value="${row.ponderation}" /></td>
-                        <td>${row.autoevaluation_objectif}</td>
-                        <td><input type="text" name="note_objectif[]" value="${row.note_objectif}" /></td>
-                        <input type="hidden" name="id_objectif[]" value="${row.id}" />
-                    </tr>
-                `;
-            });
-        }
-
-        // Fonction pour remplir le tableau "Performance Quotidienne"
-        function populatePerformanceQuotidienne(data) {
-            let tableBody = document.getElementById('performanceQuotidienneBody');
-            tableBody.innerHTML = ''; // Effacer les données existantes
-            data.forEach(row => {
-                tableBody.innerHTML += `
-                    <tr>
-                        <td>${row.description}</td>
-                        <td><input type="text" name="ponderation[]" value="${row.ponderation}" /></td>
-                        <td><input type="text" name="AUTO_EVALUATION_PERFORM[]" value="${row.AUTO_EVALUATION_PERFORM}" /></td>
-                        <td><input type="text" name="NOTE_EVALUATEUR[]" value="${row.NOTE_EVALUATEUR}" /></td>
-                        <input type="hidden" name="id_performance[]" value="${row.id}" />
-
-                    </tr>
-                `;
-            });
-        }
-
-        // Fonction pour remplir le tableau "Compétence"
-        function populateCompetence(data) {
-            let tableBody = document.getElementById('competenceBody');
-            tableBody.innerHTML = ''; // Effacer les données existantes
-            data.forEach(row => {
-                tableBody.innerHTML += `
-                    <tr>
-                        <td>${row.description}</td>
-                        <td class="niveau-requis">${row.niveau_requis}</td>
-                        <td><input type="text" name="niveau_capacite[]" class="niveau-capacite" value="${row.niveau_capacite}" oninput="calculateCapacityLacunes(this.closest('tr'))" /></td>
-                        <td class="capacite-lacunes">${row.niveau_requis - row.niveau_capacite}</td>
-                        <td><input type="text" name="COMMENTAIRE[]" value="${row.COMMENTAIRE}" /></td>
-                        <input type="hidden" name="id_competence[]" value="${row.id}" />
-                    </tr>
-                `;
-            });
-        }
-
-        // Calculer la capacité et les lacunes
-        function calculateCapacityLacunes(row) {
-            const niveauRequis = parseFloat(row.querySelector('.niveau-requis').textContent);
-            const niveauCapaciteInput = row.querySelector('.niveau-capacite');
-            const capaciteLacunesCell = row.querySelector('.capacite-lacunes');
-
-            let niveauCapacite = parseFloat(niveauCapaciteInput.value) || 0;
-            capaciteLacunesCell.textContent = niveauCapacite - niveauRequis;
-        }
-
-        // Initialise l'affichage pour la section "Tâche Principale"
-        document.addEventListener("DOMContentLoaded", function () {
-            showSection('section1');
-        });
-
-        // Met à jour le champ matricule caché à chaque sélection de salarié
-        document.getElementById('salarie').addEventListener('change', function () {
-    var matricule = this.value;
-    console.log('Selected matricule:', matricule); // Vérifiez la valeur du matricule
-    document.getElementById('selectedMatricule1').value = matricule;
-    document.getElementById('selectedMatricule2').value = matricule;
-    document.getElementById('selectedMatricule3').value = matricule;
-});
-
-
-    </script>
+        return true;
+    }
+</script>
 <script>
 // jQuery
 $(function() {
@@ -251,9 +268,7 @@ $(function() {
   });
 });
 </script>
-
 </head>
-
 <body ng-app="myApp">
 <div id="top">
   <div id="topBar"></div>
@@ -291,7 +306,7 @@ $(function() {
             <li class="menu-admin"><a href="autoevaluation.php">Autoevaluation</a></li>
             <li><a href="evaluation31.php">Evaluer un collaborateur</a></li>
             <li><a href="modifier31.php">Modifier une evaluation</a></li>
-            <li><a href="">Valider une evaluation</a></li>
+            <li><a href="valider_evaluation.php">Valider une evaluation</a></li>
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Rapport</li>
             <li><a href="">Rapport individuel</a></li>
@@ -305,7 +320,7 @@ $(function() {
       </ul>
       <ul class="nav navbar-nav navbar-right">
     <li><a href="mes_infos.php">Mes infos <span class="fa fa-user fa-lg me-2"></span></a></li>
-    <li><a href="">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
+    <li><a href="index.php">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
 </ul>
 
     </div>
@@ -317,15 +332,15 @@ $(function() {
             <label for="salarie">Sélectionnez un salarié :</label>
             <select id="salarie" class="form-control  narrow-select" onchange="fetchEmployeeData(this.value)">
                 <option value="">-- Sélectionner --</option>
-                <?php foreach ($salaries as $salarie): ?>
-                    <option value="<?php echo $salarie['matricule']; ?>">
-                        <?php echo htmlspecialchars($salarie['NOM']) . " " . htmlspecialchars($salarie['PRENOM']); ?>
+                <?php foreach ($subordinates as $subordinate): ?>
+                    <option value="<?php echo htmlspecialchars($subordinate['matricule']); ?>">
+                        <?php echo htmlspecialchars($subordinate['nom'] . ' ' . $subordinate['prenom']); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
         </div>
 
-        <form action="update_tache_principale.php" method="POST">
+        <form action="update_tache_principale.php" method="POST" onsubmit="return validateNotes()">
     <div id="section1" class="section">
         <h3>Tâche principale</h3>
         <table class="table table-bordered">
@@ -349,7 +364,7 @@ $(function() {
 </form>
 
 <!-- Formulaire pour la section Performance Quotidienne -->
-<form action="update_performance_quotidienne.php" method="POST">
+<form action="update_performance_quotidienne.php" method="POST" onsubmit="return validateNotes()">
     <div id="section2" class="section">
         <h3>Performance quotidienne</h3>
         <table class="table table-bordered">
@@ -373,7 +388,7 @@ $(function() {
 </form>
 
 <!-- Formulaire pour la section Compétence -->
-<form action="update_competence.php" method="POST">
+<form action="update_competence.php" method="POST" onsubmit="return validateNotes()">
     <div id="section3" class="section">
         <h3>Compétence</h3>
         <table class="table table-bordered">

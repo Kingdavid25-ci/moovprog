@@ -16,6 +16,22 @@ if ($unit && $dateCreation && $numObjectives) {
         $ponderation = isset($_POST["objective{$i}Ponderation"]) ? $_POST["objective{$i}Ponderation"] : 0;
         $categorie = "tache principale";
 
+        // Vérifier si des objectifs identiques existent déjà
+        $sql_check = "SELECT COUNT(*) as total FROM objectif WHERE sructure_entreprise_id = ? AND description = ? AND indicateur_performance = ? AND ponderation = ? AND categorie = ?";
+        $stmt_check = $conn->prepare($sql_check);
+        $stmt_check->bind_param("issss", $unit, $description, $indicateur, $ponderation, $categorie);
+        $stmt_check->execute();
+        $stmt_check->bind_result($total);
+        $stmt_check->fetch();
+        $stmt_check->close();
+
+        if ($total > 0) {
+            // Si des objectifs identiques existent déjà, afficher un message d'alerte et arrêter l'exécution
+            echo "<script>alert('Vous tentez d\'enregistrer des objectifs transversaux déjà existants.'); window.location.href = 'créer_objectif.php';</script>";
+            $conn->close();
+            exit();
+        }
+
         // Préparer et exécuter la requête d'insertion
         $stmt = $conn->prepare("INSERT INTO objectif (sructure_entreprise_id, date_creation, description, indicateur_performance, ponderation, categorie) VALUES (?, ?, ?, ?, ?, ?)");
         $stmt->bind_param("isssis", $unit, $dateCreation, $description, $indicateur, $ponderation, $categorie);

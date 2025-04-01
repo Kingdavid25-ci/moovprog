@@ -85,7 +85,7 @@ button:hover {
             <li class="menu-admin"><a href="autoevaluation.php">Autoevaluation</a></li>
             <li><a href="evaluation31.php">Evaluer un collaborateur</a></li>
             <li><a href="modifier31.php">Modifier une evaluation</a></li>
-            <li><a href="">Valider une evaluation</a></li>
+            <li><a href="valider_evaluation.php">Valider une evaluation</a></li>
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Rapport</li>
             <li><a href="">Rapport individuel</a></li>
@@ -99,7 +99,7 @@ button:hover {
       </ul>
       <ul class="nav navbar-nav navbar-right">
     <li><a href="mes_infos.php">Mes infos <span class="fa fa-user fa-lg me-2"></span></a></li>
-    <li><a href="">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
+    <li><a href="index.php">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
 </ul>
 
     </div>
@@ -464,95 +464,91 @@ function deleteQuestion(button) {
         }
 
        
-    function saveAll() {
-        const objectiveRows = Array.from(document.querySelectorAll('#transversalObjectivesTable tbody tr'));
-        const performanceRows = Array.from(document.querySelectorAll('#dailyPerformanceTable tbody tr'));
-        const competencyRows = Array.from(document.querySelectorAll('#competenciesTable tbody tr'));
-        const developmentQuestionRows = Array.from(document.querySelectorAll('#developmentQuestionsTable tbody tr'));
+        function saveAll() {
+    const objectiveRows = Array.from(document.querySelectorAll('#transversalObjectivesTable tbody tr'));
+    const performanceRows = Array.from(document.querySelectorAll('#dailyPerformanceTable tbody tr'));
+    const competencyRows = Array.from(document.querySelectorAll('#competenciesTable tbody tr'));
+    const developmentQuestionRows = Array.from(document.querySelectorAll('#developmentQuestionsTable tbody tr'));
 
-        let totalObjectiveWeighting = 0;
-        let totalPerformanceWeighting = 0;
+    let totalObjectiveWeighting = 0;
+    let totalPerformanceWeighting = 0;
 
-        const objectives = [];
-        const performances = [];
-        const competencies = [];
-        const development= [];
+    const objectives = [];
+    const performances = [];
+    const competencies = [];
+    const development = [];
 
-        objectiveRows.forEach(row => {
-            totalObjectiveWeighting += parseFloat(row.cells[3].innerText);
-            objectives.push({
-                description: row.cells[1].innerText,
-                indicator: row.cells[2].innerText,
-                weighting: parseFloat(row.cells[3].innerText),
-                etat: row.cells[4].innerText
-            });
+    objectiveRows.forEach(row => {
+        totalObjectiveWeighting += parseFloat(row.cells[3].innerText);
+        objectives.push({
+            description: row.cells[1].innerText,
+            indicator: row.cells[2].innerText,
+            weighting: parseFloat(row.cells[3].innerText),
+            etat: row.cells[4].innerText
         });
+    });
 
-        performanceRows.forEach(row => {
-            totalPerformanceWeighting += parseFloat(row.cells[2].innerText);
-            performances.push({
-                description: row.cells[1].innerText,
-                weighting: parseFloat(row.cells[2].innerText),
-                etat: row.cells[3].innerText
-            });
+    performanceRows.forEach(row => {
+        totalPerformanceWeighting += parseFloat(row.cells[2].innerText);
+        performances.push({
+            description: row.cells[1].innerText,
+            weighting: parseFloat(row.cells[2].innerText),
+            etat: row.cells[3].innerText
         });
+    });
 
-        competencyRows.forEach(row => {
-            competencies.push({
-                description: row.cells[1].innerText,
-                requiredLevel: row.cells[2].innerText,
-                etat: row.cells[3].innerText
-            });
+    competencyRows.forEach(row => {
+        competencies.push({
+            description: row.cells[1].innerText,
+            requiredLevel: row.cells[2].innerText,
+            etat: row.cells[3].innerText
         });
-        developmentQuestionRows.forEach(row => {
-            development.push({
-                description: row.cells[1].innerText,
-                etat: row.cells[2].innerText
-            });
+    });
+
+    developmentQuestionRows.forEach(row => {
+        development.push({
+            description: row.cells[1].innerText,
+            etat: row.cells[2].innerText
         });
+    });
 
-        if (totalObjectiveWeighting !== 100) {
-            alert(`La somme des pondérations des objectifs transversaux doit être égale à 100%. Actuellement: ${totalObjectiveWeighting}%`);
-            return;
-        }
-
-        if (totalPerformanceWeighting !== 100) {
-            alert(`La somme des pondérations des performances quotidiennes doit être égale à 100%. Actuellement: ${totalPerformanceWeighting}%`);
-            return;
-        }
-
-        const data = {
-            objectives,
-            performances,
-            competencies,
-            development
-        };
-
-        fetch('save_data.php', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(data)
-})
-.then(response => {
-    console.log('Raw response:', response);
-    return response.json();
-})
-.then(result => {
-    console.log('Parsed result:', result);
-    if (result.status === 'success') {
-        alert('Données sauvegardées avec succès !');
-    } else {
-        alert(`Erreur lors de la sauvegarde des données: ${result.message}\nErreurs: ${result.errors.join(', ')}`);
+    if (totalObjectiveWeighting !== 100) {
+        alert(`La somme des pondérations des objectifs transversaux doit être égale à 100%. Actuellement: ${totalObjectiveWeighting}%`);
+        return;
     }
-})
-.catch(error => {
-    console.error('Erreur:', error);
-    alert(`Erreur lors de la sauvegarde des données: ${error.message}\nDétails: ${error}`);
-});
 
+    if (totalPerformanceWeighting !== 100) {
+        alert(`La somme des pondérations des performances quotidiennes doit être égale à 100%. Actuellement: ${totalPerformanceWeighting}%`);
+        return;
     }
+
+    const data = {
+        objectives,
+        performances,
+        competencies,
+        development
+    };
+
+    fetch('save_data.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.status === 'success') {
+            alert('Données sauvegardées avec succès !');
+        } else {
+            alert(`Erreur lors de la sauvegarde des données: ${result.message}\nErreurs: ${result.errors.join(', ')}`);
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert(`Erreur lors de la sauvegarde des données.`);
+    });
+}
  
         
 </script>

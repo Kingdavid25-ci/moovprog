@@ -2,7 +2,18 @@
 session_start();
 
 // Paramètres de connexion à la base de données
-include('db_connection.php');
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "moovprog";
+
+// Créer une connexion à la base de données
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+// Vérifier la connexion
+if ($conn->connect_error) {
+    die("Échec de la connexion : " . $conn->connect_error);
+}
 
 // matricule de l'utilisateur connecté
 $matricule = $_SESSION['user_name'];
@@ -227,7 +238,7 @@ button:hover {
       </ul>
       <ul class="nav navbar-nav navbar-right">
     <li><a href="mes_infos.php">Mes infos <span class="fa fa-user fa-lg me-2"></span></a></li>
-    <li><a href="">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
+    <li><a href="index.php">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
 </ul>
 
     </div>

@@ -1,3 +1,41 @@
+<?php
+session_start();
+include('db_connection.php');
+
+// Vérifier si l'utilisateur est authentifié
+if (!isset($_SESSION['user_name'])) {
+    header('Location: login.php');
+    exit();
+}
+
+// MATRICULE de l'utilisateur connecté
+$MATRICULE = $_SESSION['user_name'];
+
+// Récupérer l'ID du poste de l'utilisateur connecté
+$sql_poste = "SELECT id_poste FROM affectation WHERE matricule = ?";
+$stmt_poste = $conn->prepare($sql_poste);
+$stmt_poste->bind_param("s", $MATRICULE);
+$stmt_poste->execute();
+$stmt_poste->bind_result($id_poste);
+$stmt_poste->fetch();
+$stmt_poste->close();
+
+if (!$id_poste) {
+    die("Erreur : ID du poste non trouvé pour l'utilisateur connecté.");
+}
+
+// Récupérer les évaluations en attente de validation
+$sql = "SELECT e.*, s.superieur_hierarchique 
+        FROM evaluation e 
+        JOIN salarie s ON e.matricule = s.matricule 
+        WHERE e.statut_evaluation = 'En attente' 
+        AND s.superieur_hierarchique = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $id_poste);
+$stmt->execute();
+$result = $stmt->get_result();
+?>
+
 <!DOCTYPE html>
 <html lang="fr">
 

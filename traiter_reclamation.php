@@ -23,9 +23,9 @@ $reclamation = $conn->real_escape_string($_POST['reclamation']);
 $sql = "INSERT INTO evaluation (ID_OBJECTIF, Matricule, Reclamation) VALUES ('$id_objectif', '$matricule', '$reclamation')";
 
 if ($conn->query($sql) === TRUE) {
-    echo "Réclamation enregistrée avec succès avec l'ID Objectif : $id_objectif";
+    echo "<script>alert('Réclamation enregistrée avec succès avec l\'ID Objectif : $id_objectif'); window.location.href = 'reclamation.php';</script>";
 } else {
-    echo "Erreur : " . $sql . "<br>" . $conn->error;
+    echo "<script>alert('Erreur : " . $conn->error . "'); window.location.href = 'reclamation.php';</script>";
 }
 
 // Fermer la connexion

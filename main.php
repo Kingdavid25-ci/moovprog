@@ -1,10 +1,30 @@
+<?php
+session_start();
+include('db_connection.php');
+
+// Vérifier si l'utilisateur est authentifié
+if (!isset($_SESSION['user_name'])) {
+    header('Location: login.php');
+    exit();
+}
+
+// MATRICULE de l'utilisateur connecté
+$MATRICULE = $_SESSION['user_name'];
+
+// // Récupérer les évaluations validées
+// $sql = "SELECT * FROM evaluation WHERE statut_evaluation = ?";
+// $stmt = $conn->prepare($sql);
+// $stmt->bind_param("s", $MATRICULE);
+// $stmt->execute();
+// $result = $stmt->get_result();
+?>
 
 <!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title> Evaluation_main | Main Menu</title>
+<title>Evaluation_main | Main Menu</title>
 <link rel="icon" type="image/png" href="images/logo48.png" />
 <link rel="stylesheet" type="text/css" href="css/body.css">
 <link rel="stylesheet" type="text/css" href="css/chrome.css">
@@ -138,7 +158,7 @@ $(function() {
             <li class="menu-admin"><a href="autoevaluation.php">Autoevaluation</a></li>
             <li><a href="evaluation31.php">Evaluer un collaborateur</a></li>
             <li><a href="modifier31.php">Modifier une evaluation</a></li>
-            <li><a href="">Valider une evaluation</a></li>
+            <li><a href="valider_evaluation.php">Valider une evaluation</a></li>
             <li role="separator" class="divider"></li>
             <li class="dropdown-header">Rapport</li>
             <li><a href="">Rapport individuel</a></li>
@@ -152,7 +172,7 @@ $(function() {
       </ul>
       <ul class="nav navbar-nav navbar-right">
     <li><a href="mes_infos.php">Mes infos <span class="fa fa-user fa-lg me-2"></span></a></li>
-    <li><a href="">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
+    <li><a href="index.php">Se déconnecter <span class="fa fa-sign-out fa-lg me-2"></span></a></li>
 </ul>
 
     </div>
@@ -229,6 +249,32 @@ $(function() {
     </div>
   </div>
 </div>
+<!-- <div class="container">
+    <h1>Évaluations Validées</h1>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Matricule</th>
+                <th>Objectif</th>
+                <th>Pondération</th>
+                <th>Date de réalisation</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php while ($row = $result->fetch_assoc()): ?>
+                <tr>
+                    <td><?php echo htmlspecialchars($row['matricule']); ?></td>
+                    <td><?php echo htmlspecialchars($row['id_objectif']); ?></td>
+                    <td><?php echo htmlspecialchars($row['ponderation']); ?></td>
+                    <td><?php echo htmlspecialchars($row['date_realisation']); ?></td>
+                    <td><?php echo htmlspecialchars($row['statut_evaluation']); ?></td>
+                </tr>
+            <?php endwhile; ?>
+        </tbody>
+    </table>
+</div> -->
+
 <div id="footer">
     <footer class="text-center">
         <div class="container">
@@ -240,7 +286,25 @@ $(function() {
         </div>
     </footer>
   </div>
-</body>
+<!-- <script>
+    function validerEvaluation(id) {
+        if (confirm('Êtes-vous sûr de vouloir approuver cette évaluation ?')) {
+            window.location.href = 'update_statut.php?action=valider&id=' + id;
+        }
+    }
+
+    function rejeterEvaluation(id) {
+        if (confirm('Êtes-vous sûr de vouloir rejeter cette évaluation ?')) {
+            window.location.href = 'update_statut.php?action=rejeter&id=' + id;
+        }
+    }
+
+    function validerTout() {
+        if (confirm('Êtes-vous sûr de vouloir approuver toutes les évaluations ?')) {
+            window.location.href = 'update_statut.php?action=valider_tout';
+        }
+    }
+</script> -->
 <script>
         // Fonction pour naviguer vers d'autres pages
         function navigateTo(page) {
@@ -254,4 +318,5 @@ $(function() {
             }
         }
     </script>
+</body>
 </html>

@@ -1,100 +1,120 @@
 <?php
 session_start();
-
-// Paramètres de connexion à la base de données
 include('db_connection.php');
 
-// Matricule de l'utilisateur connecté
-$matricule = $_SESSION['user_name'];
+// Vérifier si l'utilisateur est authentifié
+if (!isset($_SESSION['user_name'])) {
+    header('Location: login.php');
+    exit();
+}
 
-// Récupérer le unit_id du supérieur à partir de son matricule
-$sql = "SELECT unit_id FROM salarie WHERE matricule = ?";
+// MATRICULE de l'utilisateur connecté
+$MATRICULE = $_SESSION['user_name'];
+
+// Récupérer les évaluations en attente de validation
+$sql = "SELECT * FROM evaluation WHERE statut_evaluation = 'En attente' AND superieur_hierarchique = ?";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("s", $matricule);
+$stmt->bind_param("s", $MATRICULE);
 $stmt->execute();
-$stmt->bind_result($unit_superieur);
-$stmt->fetch();
-$stmt->close();
+$result = $stmt->get_result();
+?>
 
-// Obtenir la date actuelle du système
-$date_creation = date("Y-m-d H:i:s");
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Valider les évaluations</title>
+<link rel="stylesheet" type="text/css" href="css/body.css">
+<link rel="stylesheet" type="text/css" href="css/chrome.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Valider les évaluations</h1>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Matricule</th>
+                    <th>Objectif</th>
+                    <th>Pondération</th>
+                    <th>Date de réalisation</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php while ($row = $result->fetch_assoc()): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($row['matricule']); ?></td>
+                        <td><?php echo htmlspecialchars($row['id_objectif']); ?></td>
+                        <td><?php echo htmlspecialchars($row['ponderation']); ?></td>
+                        <td><?php echo htmlspecialchars($row['date_realisation']); ?></td>
+                        <td>
+                            <button class="btn btn-success" onclick="validerEvaluation(<?php echo $row['id']; ?>)">Approuver</button>
+                            <button class="btn btn-danger" onclick="rejeterEvaluation(<?php echo $row['id']; ?>)">Rejeter</button>
+                        </td>
+                    </tr>
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+        <button class="btn btn-primary" onclick="validerTout()">Valider tout</button>
+    </div>
 
-// Vérifier si le formulaire a été soumis
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Traiter les pondérations et statuts
-    if (isset($_POST['ponderation']) && isset($_POST['statut'])) {
-        foreach ($_POST['ponderation'] as $id => $ponderation) {
-            $statut = $_POST['statut'][$id];
-
-            $id = $conn->real_escape_string($id);
-            $ponderation = $conn->real_escape_string($ponderation);
-            $statut = $conn->real_escape_string($statut);
-            $unit_superieur = $conn->real_escape_string($unit_superieur);
-            $date_creation = $conn->real_escape_string($date_creation);
-
-            $sql = "UPDATE objectif SET 
-                        ponderation = '$ponderation', 
-                        statut = '$statut', 
-                        sructure_entreprise_id = '$unit_superieur', 
-                        date_creation = '$date_creation' 
-                    WHERE id = '$id'";
-            $conn->query($sql);
-        }
-    }
-
-    // Récupérer les objectifs de catégorie "performance quotidienne" avec le statut "Applicable"
-    $objectives = [];
-    $sql = "SELECT id FROM objectif WHERE sructure_entreprise_id = ? AND categorie = 'performance quotidienne' AND statut = 'Applicable'";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $unit_superieur);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($result->num_rows > 0) {
-        while ($row = $result->fetch_assoc()) {
-            $objectives[] = $row['id'];
-        }
-    }
-    $stmt->close();
-
-    // Récupérer les employés sous le superviseur
-    $employees = [];
-    $sql = "SELECT matricule FROM salarie WHERE superieur_hierarchique = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $matricule);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($result->num_rows > 0) {
-        while ($row = $result->fetch_assoc()) {
-            $employees[] = $row['matricule'];
-        }
-    }
-    $stmt->close();
-
-    // Affecter les objectifs aux employés dans la table evaluation
-    if (!empty($objectives) && !empty($employees)) {
-        foreach ($employees as $employee) {
-            foreach ($objectives as $objective_id) {
-                // Vérifier si l'association existe déjà
-                $sql = "SELECT 1 FROM evaluation WHERE MATRICULE = ? AND ID_OBJECTIF = ?";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("ii", $employee, $objective_id);
-                $stmt->execute();
-                $stmt->store_result();
-                if ($stmt->num_rows == 0) {
-                    // Si l'association n'existe pas, insérer une nouvelle ligne
-                    $sql = "INSERT INTO evaluation (MATRICULE, ID_OBJECTIF) VALUES (?, ?)";
-                    $stmt = $conn->prepare($sql);
-                    $stmt->bind_param("ii", $employee, $objective_id);
-                    $stmt->execute();
-                }
-                $stmt->close();
+    <script>
+        function validerEvaluation(id) {
+            if (confirm('Êtes-vous sûr de vouloir approuver cette évaluation ?')) {
+                window.location.href = 'update_statut.php?action=valider&id=' + id;
             }
         }
-    }
+
+        function rejeterEvaluation(id) {
+            if (confirm('Êtes-vous sûr de vouloir rejeter cette évaluation ?')) {
+                window.location.href = 'update_statut.php?action=rejeter&id=' + id;
+            }
+        }
+
+        function validerTout() {
+            if (confirm('Êtes-vous sûr de vouloir approuver toutes les évaluations ?')) {
+                window.location.href = 'update_statut.php?action=valider_tout';
+            }
+        }
+    </script>
+</body>
+</html>
+```
+<?php
+session_start();
+include('db_connection.php');
+
+// Vérifier l'action à effectuer
+$action = $_GET['action'];
+
+if ($action == 'valider') {
+    $id = $_GET['id'];
+    $sql = "UPDATE evaluation SET statut_evaluation = 'Validée' WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $stmt->close();
+} elseif ($action == 'rejeter') {
+    $id = $_GET['id'];
+    $sql = "UPDATE evaluation SET statut_evaluation = 'Rejetée' WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $stmt->close();
+} elseif ($action == 'valider_tout') {
+    $MATRICULE = $_SESSION['user_name'];
+    $sql = "UPDATE evaluation SET statut_evaluation = 'Validée' WHERE statut_evaluation = 'En attente' AND superieur_hierarchique = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $MATRICULE);
+    $stmt->execute();
+    $stmt->close();
 }
 
 echo "L'enregistrement a été sauvegardé.";
 $conn->close();
+header('Location: valider_evaluation.php');
+exit();
 ?>
 <!doctype html>
 <html>

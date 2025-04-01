@@ -205,7 +205,7 @@ button:hover {
                 <li class="menu-admin"><a href="affecter.php">affecter des objectifs</a></li>
                 <li><a href="Evaluation_objectif.php">evaluer un subalterne</a></li>
                 <li><a href="modifier_evaluation.php">modifier une evaluation</a></li>
-                <li><a href="">valider une evaluation</a></li>
+                <li><a href="valider_evaluation.php">valider une evaluation</a></li>
               </ul>
             </li>
             <li class="dropdown menu-admin">
